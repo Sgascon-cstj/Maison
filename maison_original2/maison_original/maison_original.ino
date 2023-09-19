@@ -51,19 +51,25 @@ int lumiere;
 bool gazBool;
 bool pluieBool;
 bool solBool;
-bool deuxiemePortSerieBool = false;
+bool megaBool = false;
 bool consoleBool = false;
 bool boutonGauche;
 bool boutonDroit;
 String buffer;
 String reception;
 bool lumiereAllumerParLaCommande;
-
+String commande[8];
+int commandeIndex = 0;
+int historyPos = 0;
+bool estDansLesCommandes = true;
+String option[] = {"Temperature", "Lumiere", "Eau","Gaz","Sol"};
+int indexOption = 0;
 int sol;
 int val;
 int value_led2;
 int water;
 int tonepin = 3;
+int temperature;
 
 //Définition des Pins--------------------------------
 const int gasPin = A0;
@@ -82,18 +88,19 @@ const int detectHumidPin = A2;  //Détecteur d'humidité dans le sol
 const int relaisPin = 12;       //Relais devant la maison
 const int DELJaunePin = 5;      //Del près du toit
 
-SoftwareSerial deuxiemePortSerie(rxPin, txPin);
+SoftwareSerial mega(rxPin, txPin);
 
 void setup() {
   Serial.begin(9600);  //Initialiser la console a 9600 baud
   Serial.println("Senseur Maison keyes Version " + version);
-  deuxiemePortSerie.begin(9600);  //Initialiser le port série pour le bluetooth ou pour un autre module en série
+  mega.begin(9600);  //Initialiser le port série pour le bluetooth ou pour un autre module en série
 
   mylcd.init();           //Initialiser le panneau lcd
   mylcd.backlight();      //Allumer la DEL du panneau lcd
+
   mylcd.setCursor(0, 0);  //Placer le cureseur sur la première colonne, premier caractère
   mylcd.print("passcord:");
-
+  mylcd.clear();
 
 
   //Définir les pinModes ------------------------------------- S'assurer que tout les pins sont défénit en output ou en input*************
@@ -119,33 +126,65 @@ void setup() {
 
 void loop() {
   lireSenseurs();  //On veut lire les senseurs le plus souvent possible et avoir l'état de la maison le plus souvent possible
-  if (deuxiemePortSerie.available() > 0) {
-    val = deuxiemePortSerie.read();
-    reception = (" du deuxiemePortSerie ");
-    deuxiemePortSerieBool = true;
+  if (mega.available() > 0) {
+    val = mega.read();
+    if(val == 'y'){
+      String temp = mega.readStringUntil('#');
+      temperature = String(temp).toInt()/100;
+
+    }else{
+      reception = (" du mega ");
+      megaBool = true;
+      commande[commandeIndex] = val;
+      mylcd.setCursor(0, 0);
+      mylcd.print("Commande: ");
+      mylcd.print(val);
+      commandeIndex++;
+      if (commandeIndex > 8) {
+      commandeIndex = 0;
+      }
+    }
+
   }
   if (Serial.available() > 0) {
     val = Serial.read();  //Définir la valeur de val à la valeur de la commmande
     reception = ("Console");
     consoleBool = true;
+    commande[commandeIndex] = val;
+    mylcd.setCursor(0, 0);
+    mylcd.print("Commande: ");
+    mylcd.print(val);
+    commandeIndex++;
+   
+    if (commandeIndex > 8) {
+    commandeIndex = 0;
+    }
+    delay(100);
   }
+  //Commande recu
+  if (megaBool || consoleBool) {
+    digitalWrite(DELJaunePin,HIGH);
+    tone(buzzerPin, 440,2);
+  }
+  Menu();
+
   switch (val) {
     case 'a':
       digitalWrite(DELBlanchePin, HIGH);  //Allumer la led blanche
-      Serial.println("Del blanche allumé " + reception);
+      Serial.println("Del blanche allumé " );
       lumiereAllumerParLaCommande = true;
       break;
     case 'b':
       digitalWrite(DELBlanchePin, LOW);  //Éteindre la led blanche
-      Serial.println("Del blanche éteint " + reception);
+      Serial.println("Del blanche éteint " );
       lumiereAllumerParLaCommande = false;
       break;
     case 'c':
-      Serial.println("Relais allumé " + reception);
+      Serial.println("Relais allumé ");
       digitalWrite(relaisPin, HIGH);  //Connecter le relais
       break;
     case 'd':
-      Serial.println("Relais fermer " + reception);
+      Serial.println("Relais fermer ");
       digitalWrite(relaisPin, LOW);  //Éteindre le relais
       break;
     case 'e':
@@ -158,43 +197,39 @@ void loop() {
       //noTone(3);
       break;
     case 'h':
-      Serial.print(reception);
       Serial.print(" Valeur de la lumière ");  //Envoyer la valeur de la lumière dans la console
       Serial.println(lumiere);
-      if (reception == " du deuxiemePortSerie ") {
-        deuxiemePortSerie.print(" Valeur de la lumière ");
-        deuxiemePortSerie.println(lumiere);
+      if (reception == " du mega ") {
+        mega.print(" Valeur de la lumière ");
+        mega.println(lumiere);
       }
       delay(100);
       break;
     case 'i':  //Envoyer la valeur du gaz dans la console
-      Serial.print(reception);
       Serial.print("Valeur du gaz ");  //Envoyer la valeur du gas dans la console
       Serial.println(gas);
-      if (reception == " du deuxiemePortSerie ") {
-        deuxiemePortSerie.print("Valeur du gaz ");  //Envoyer la valeur du gas dans la console
-        deuxiemePortSerie.println(gas);
+      if (reception == " du mega ") {
+        mega.print("Valeur du gaz ");  //Envoyer la valeur du gas dans la console
+        mega.println(gas);
       }
       delay(100);
       break;
     case 'j':  //Envoyer la valeur de l'humidité du sol dans la console
-      Serial.print(reception);
       Serial.print(" Valeur du sol ");  //Envoyer la valeur du sol dans la console
       Serial.println(sol);
 
-      if (reception == " du deuxiemePortSerie ") {
-        deuxiemePortSerie.print("Valeur du sol ");
-        deuxiemePortSerie.println(sol);
+      if (reception == " du mega ") {
+        mega.print("Valeur du sol ");
+        mega.println(sol);
       }
       delay(100);
       break;
     case 'k':
-      Serial.print(reception);
       Serial.print(" Valeur de l'eau ");  //Envoyer la valeur de la lumière dans la console
       Serial.println(water);
-      if (reception == " du deuxiemePortSerie ") {
-        deuxiemePortSerie.print("Valeur de l'eau ");
-        deuxiemePortSerie.println(water);
+      if (reception == " du mega ") {
+        mega.print("Valeur de l'eau ");
+        mega.println(water);
       }
       delay(100);
       break;
@@ -238,9 +273,9 @@ void loop() {
       //delay(300);
       break;
     case 'v':
-      if(deuxiemePortSerieBool){
-       led2 = deuxiemePortSerie.readStringUntil('#');
-       deuxiemePortSerieBool = false;
+      if(megaBool){
+       led2 = mega.readStringUntil('#');
+       megaBool = false;
       }
       else{
        led2 = Serial.readStringUntil('#');
@@ -251,9 +286,9 @@ void loop() {
      
       break;
     case 'w':  //Points supplémentaires pour ceux qui vont faire la logique de validation
-      if(deuxiemePortSerieBool){
-       fans_char = deuxiemePortSerie.readStringUntil('#');
-       deuxiemePortSerieBool = false;
+      if(megaBool){
+       fans_char = mega.readStringUntil('#');
+       megaBool = false;
       }
       else{
        fans_char = Serial.readStringUntil('#');
@@ -267,12 +302,60 @@ void loop() {
   }
   val = ' ';
 }
+void Menu(){
+  if(!digitalRead(boutonGauchePin)){
+    estDansLesCommandes= !estDansLesCommandes;
+    mylcd.clear();
+  }
+  if(estDansLesCommandes){
+
+    mylcd.setCursor(0, 0);
+    mylcd.print("Commande: ");
+    mylcd.print(commande[historyPos]);
+    if (!digitalRead(boutonDroitPin)) {
+      if (historyPos > 7) {
+      historyPos = -1;
+      }
+      mylcd.clear();
+      mylcd.setCursor(0, 0);
+      mylcd.print("Commande: ");
+      historyPos ++;
+      mylcd.print(commande[historyPos]); 
+      mylcd.print(" ");
+      mylcd.print(historyPos);
+      delay(1000);
+
+    }
+  }else{
+    mylcd.setCursor(0, 0);  
+    mylcd.print(option[indexOption]); 
+    if (!digitalRead(boutonDroitPin)){
+      indexOption++;
+      mylcd.clear();
+      delay(500);
+      if(indexOption > 4){
+        indexOption = 0;
+      }
+      option[0] = "Temperature:";
+      option[0] += temperature;
+      option[1] = "Lumiere:";
+      option[1] += lumiere;
+      option[2] = "Eau:";
+      option[2] += water;
+      option[3] = "Gas:";
+      option[3] += gas;
+      option[4] = "Sol:";
+      option[4] += sol;
+    }
+  }
+
+}
 //Lire l'état des senseurs de la maison
 void lireSenseurs() {
   gas = analogRead(gasPin);
   if (gas > gasMaximal && !gazBool) {         //Tester avec une valeur réelles
     Serial.println("danger gaz élevé");       //Pour débugger sur la console
-    deuxiemePortSerie.println("Danger gaz");  //*****test
+    mega.println("Danger gaz");  //*****test
     gazBool = true;
   } else {
     if (gas <= gasMaximal) {
@@ -284,7 +367,7 @@ void lireSenseurs() {
   if (lumiere < lumiereMin && !lumiereAllumerParLaCommande) {
       
     Serial.println("Lumière insuffisante");  //*********************tester si nécessaire sur blutooth
-    deuxiemePortSerie.println("Lumière insuffisante");
+    mega.println("Lumière insuffisante");
     if (digitalRead(detectMovePin)) {
       digitalWrite(DELBlanchePin, HIGH);  //Allumer la lumière m
     } else {
@@ -301,7 +384,7 @@ void lireSenseurs() {
   water = analogRead(detectEauPin);
   if (water > eauMax && !pluieBool) {
     Serial.println("il pleut");         //Pour débugger sur la console
-    deuxiemePortSerie.println("rain");  //Doit être en anglais pour le programme sur le téléphone
+    mega.println("rain");  //Doit être en anglais pour le programme sur le téléphone
     pluieBool = true;
 
   } else {
@@ -314,7 +397,7 @@ void lireSenseurs() {
   sol = analogRead(detectHumidPin);
   if (sol > solHumidMax) {
     Serial.println("sol trop humide");        //Pour débugger sur la console
-    deuxiemePortSerie.println("hydroponia");  //Doit être en anglais pour le programme sur le téléphone
+    mega.println("hydroponia");  //Doit être en anglais pour le programme sur le téléphone
     solBool = true;
   } else {
     if (sol <= solHumidMax && sol >= solHumidMin) {
@@ -322,7 +405,7 @@ void lireSenseurs() {
     } else {
       if (sol < solHumidMin && !solBool) {
         Serial.println("Sol trop sec");
-        deuxiemePortSerie.println("Sol trop sec");
+        mega.println("Sol trop sec");
         solBool = true;
       }
     }
