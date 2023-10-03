@@ -351,6 +351,9 @@ void loop() {
           Serial.println(numValue.c_str());
           newValue = newValue + numValue + "#";  //All strings
           break;
+        case 'x':
+            //Code du readAsci
+          break;  
         case 'z':
           //pServer->disconnectClient();//Pas encore fait************
           delay(5000);

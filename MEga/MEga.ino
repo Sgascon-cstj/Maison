@@ -52,6 +52,22 @@ void loop() {
    Serial1.write(bluetooth);
   
   }
+  if (millis() % 10000 == 0) {  //à chaque seconde
+    delay(1);
+    float temp = sht31.getTemperature();
+    float hum = sht31.getHumidity();
+    int temperature = (temp * 100);
+    int humid = (hum * 100);
+
+    // Serial2.print('x'+ (String)temperature + ',' + (String)humid + '\n'); 
+    Serial1.print('x');
+    Serial1.print(temperature);
+    Serial1.print(',');
+    Serial1.print(humid);
+    Serial1.print('\n');
+    Serial1.flush();  //Juste pour être certain d'avoir enoyé tous les charactères dans la deuxième méthode1,1#
+    
+  }
   if(millis() % 1000 == 0){
     float temp = sht31.getTemperature();
     float hum = sht31.getHumidity();
@@ -60,6 +76,8 @@ void loop() {
     Serial.println(temp);
     Serial.print("Hum: ");
     Serial.println(hum);
+
+      
     if (temp >= tempMinimumPourLaFan && !fanPartie) {
       Serial.println("Fan partie");
       Serial1.write("r");

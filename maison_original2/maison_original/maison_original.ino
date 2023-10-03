@@ -62,14 +62,15 @@ String commande[8];
 int commandeIndex = 0;
 int historyPos = 0;
 bool estDansLesCommandes = true;
-String option[] = {"Temperature", "Lumiere", "Eau","Gaz","Sol"};
+String option[] = {"Temperature", "Humdite","Lumiere", "Eau","Gaz","Sol"};
 int indexOption = 0;
 int sol;
 int val;
 int value_led2;
 int water;
 int tonepin = 3;
-int temperature;
+float temperature;
+float humid;
 
 //Définition des Pins--------------------------------
 const int gasPin = A0;
@@ -128,11 +129,6 @@ void loop() {
   lireSenseurs();  //On veut lire les senseurs le plus souvent possible et avoir l'état de la maison le plus souvent possible
   if (mega.available() > 0) {
     val = mega.read();
-    if(val == 'y'){
-      String temp = mega.readStringUntil('#');
-      temperature = String(temp).toInt()/100;
-
-    }else{
       reception = (" du mega ");
       megaBool = true;
       commande[commandeIndex] = val;
@@ -143,13 +139,14 @@ void loop() {
       if (commandeIndex > 8) {
       commandeIndex = 0;
       }
-    }
+    
 
   }
   if (Serial.available() > 0) {
     val = Serial.read();  //Définir la valeur de val à la valeur de la commmande
     reception = ("Console");
     consoleBool = true;
+    mylcd.clear();
     commande[commandeIndex] = val;
     mylcd.setCursor(0, 0);
     mylcd.print("Commande: ");
@@ -297,11 +294,38 @@ void loop() {
       fans_val = String(fans_char).toInt();
       digitalWrite(moteurDirectionPin, LOW);
       analogWrite(moteurVitessePin, fans_val);
-      
+      break;
+    case 'x':
+       delay(5); //délais nécessaire si on utilise la deuxième méthode (plusieurs print) pour envoyer les donnés
+
+      while (mega.available() > 0) {
+        // trouver un INT dans le stream dans le buffer du port série
+        // Parse int laisse tomber ce qui précède le INT, et les délimiteeurs.
+        long tmp = mega.parseInt();
+        // Encore
+        long hmd = mega.parseInt();
+        
+        long response = 0;
+
+        // look for the newline. That's the end of your sentence:
+        if (mega.read() == '\n') {
+         
+          Serial.print(" Réponse: ");
+          temperature = tmp / 100.0;
+          humid = hmd / 100.0;
+          Serial.print(temperature);
+          Serial.print(" ");
+          Serial.println(humid);
+    
+        }
+      }
       break;
   }
   val = ' ';
 }
+//-----------------------------------------------------------------------------------------------------------------
+//      Menu(Commande, senseur) pour changer et acceder aux sous menu appuyer sur le bouton de gauche de la maison
+//-----------------------------------------------------------------------------------------------------------------
 void Menu(){
   if(!digitalRead(boutonGauchePin)){
     estDansLesCommandes= !estDansLesCommandes;
@@ -336,16 +360,18 @@ void Menu(){
       if(indexOption > 4){
         indexOption = 0;
       }
-      option[0] = "Temperature:";
+      option[0] = "Temp:";
       option[0] += temperature;
-      option[1] = "Lumiere:";
-      option[1] += lumiere;
-      option[2] = "Eau:";
-      option[2] += water;
-      option[3] = "Gas:";
-      option[3] += gas;
-      option[4] = "Sol:";
-      option[4] += sol;
+      option[1] = "Humidite:";
+      option[1] += humid;
+      option[2] = "Lumiere:";
+      option[2] += lumiere;
+      option[3] = "Eau:";
+      option[3] += water;
+      option[4] = "Gas:";
+      option[4] += gas;
+      option[5] = "Sol:";
+      option[5] += sol;
     }
   }
 
