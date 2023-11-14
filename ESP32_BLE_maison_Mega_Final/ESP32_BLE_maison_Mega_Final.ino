@@ -1,23 +1,19 @@
-/**
- * client BLE
- Connecté à la maison KEYSTUDIO
- par un HM-10 sur un Arduino Mega
- avec un ESP32 - écran OLED
- 
- Robert Turenne
- 2022-10-16 Version 2.0
- 2023-9-16 Version 3.0 Nettoyage du code. BLE debuggé.
- */
 
-#include "BLEDevice.h"  //pour le Bluetooth
-#include "heltec.h"     //pour le display OLED
+#include "BLEDevice.h"      //pour le Bluetooth
+#include "heltec.h"         //pour le display OLED
+#include "EspMQTTClient.h"  //Pour MQTT vers Nodered ou autre
 
-#define DEBUG
+//#define DEBUG
 
 // ATTTENTION à la version, au service et au nom !***************************!!!!!
-const char* version = "BLE ESP32-HM10 V3.0";
+const char* version = "BLE ESP32-HM10-MQTT V4.0";
 char* displayMessage = "                    ";  //utilisé pour le display OLED du ESP32
 std::string newValue;                           //utilisé pour le display OLED du ESP32
+
+//Pour MQTT CHANGER===|   le 00 par votre numéro ***************
+const char* nomBLE = "19-ESP32";  //Votre identifiant UNIQUE correspond à votre numéro du HM-10 BLE et par conséquent votre ESP32
+String noderedPayload;
+bool noderedReceived = false;
 
 // Le firmware du MH-10 défini les services et charactéristiques BLE
 // Le service REMOTE qui nous intéresse, unique dans notre environnement
@@ -34,7 +30,17 @@ static boolean disconnected = true;
 static BLERemoteCharacteristic* pRemoteCharacteristic;
 static BLEAdvertisedDevice* myDevice;
 
-
+//Identification du serveur MQTT
+//Notre accès MQTT passe par le WIFI
+EspMQTTClient client(
+  "CSTJ-UBI-D139",
+  "$$12345678",
+  "192.168.138.250",  // Adresse IP du serveur (broker) MQTT
+  //"MQTTUsername",   // Pas obligatoire
+  //"MQTTPassword",   // Pas obligatoire
+  nomBLE,  // Votre nom de client UNIQUE (voir ci-haut)
+  1883     // Le port MQTT, default to 1883. Ligne pas obligatoire
+);
 
 
 
@@ -60,7 +66,9 @@ static void notifyCallback(
   Serial.println((char*)pData);
 
   newValue = (char*)pData;
-  displayMessage = "Data reçue de BlueTooth";
+  displayMessage = "De BlueTooth ";
+  //Publier la charactéristique sur  MQTT
+  client.publish(nomBLE + String("/CB_maison"), String((char*)pData));
 }
 
 //Automatique lors du connect ou disconnect BLE
@@ -115,14 +123,14 @@ bool connectToServer() {
   // address, it will be recognized type of peer device address (public or
   // private) RT-Ben oui!, c'esst clair?????!
 
-//#ifdef DEBUG
+  //#ifdef DEBUG
   if (disconnected == false) {
     Serial.println(F(" - Maintenant Connecté au serveur"));
   } else {
     Serial.println(F("***** NON connecté su serveur *****"));
     return false;
   }
-//#endif
+  //#endif
 
   // Obtenir la référence au service. On avait déjà le service
   // Obtenu lors du scan (setup) mais on vvérifie
@@ -152,7 +160,7 @@ bool connectToServer() {
     pClient->disconnect();  //va provoquer un tentative de reConnexion
     return false;
   }
-  //La prenière partie (8 octets) contient le nom du service
+  //La prenière partie (8 octets) contient le nom du de la charactéristique
   Serial.print(F(" - Charactéristique trouvée: "));
   Serial.println(charUUID.toString().c_str());
 
@@ -226,6 +234,33 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
   }    // Regarder les objets trouvés
 };     // Callback des BLE publiés (NE PAS oublier le ;)
 
+// MQTT: cette fonction est appelée dès que la connection WIFI et MQTT est complétée
+// Dans notre cas, on s'abonne à une TOPIC et on affiche un message sur la console pour indiquer que la connection est complétée
+// ATTENTION : IMPLANTATION OBLIGATOIRE si on utilise le client MQTT
+void onConnectionEstablished() {
+
+  // S'abonner à la TOPIC esp32/commande et afficher tout message reçu sur la console
+  client.subscribe(nomBLE + String("/cmd"), [](const String& payload) {
+    Serial.print("De node-red ");
+    Serial.println(payload);
+    client.publish(nomBLE + String("/echo"), payload);
+    noderedPayload = payload;
+    noderedReceived = true;
+  });
+
+  // Subscribe to "mytopic/wildcardtest/#" and display received message to Serial
+  //client.subscribe("mytopic/wildcardtest/#", [](const String& topic, const String& payload) {
+  //  Serial.println("(From wildcard) topic: " + topic + ", payload: " + payload);
+  //});
+
+  // Publier un message pour indiquer que la connection est complétée
+  client.publish(nomBLE + String("/init"), "MQTT: connection prête!");  // You can activate the retain flag by setting the third parameter to true
+
+  // Execute delayed instructions
+  //client.executeDelayed(5 * 1000, []() {
+  //  client.publish("mytopic/wildcardtest/test123", "This is a message sent 5 seconds later");
+  //});
+}
 
 void setup() {
   Serial.begin(115200);  //ATTENTION à la vitesse de la console
@@ -261,15 +296,19 @@ void setup() {
   pBLEScan->setInterval(100);
   //pBLEScan->setWindow(449);
   pBLEScan->setWindow(99);
-  pBLEScan->setActiveScan(true);  //Active scan utilise plus de puissance, mais esst plus rapide
-  BLEScanResults foundDevices = pBLEScan->start(30, false); //commencer le scan. 30 secondes en laboratoire
+  pBLEScan->setActiveScan(true);                             //Active scan utilise plus de puissance, mais esst plus rapide
+  BLEScanResults foundDevices = pBLEScan->start(30, false);  //commencer le scan. 30 secondes en laboratoire
   //on revient ici après le scan
   Serial.print("Objets trouvés: ");
   Serial.println(foundDevices.getCount());
   Serial.println("Scan complété!");
-  pBLEScan->clearResults();   // delete results fromBLEScan buffer to release memory
+  pBLEScan->clearResults();  // delete results fromBLEScan buffer to release memory
   delay(2000);
 
+#ifdef DEBUG
+  // Parametrres optionels pour espMQTT client:
+  client.enableDebuggingMessages();  // Enable debugging (sur la console)
+#endif
 
   Serial.println(F("Fin du SETUP"));
 }  // Fin du setup.
@@ -277,6 +316,9 @@ void setup() {
 
 void loop() {
 
+
+  //MQTT - Obligatoire à chaque itération
+  client.loop();
 
   Heltec.display->clear();
   Heltec.display->drawString(0, 0, version);  //Attention à la version
@@ -351,9 +393,6 @@ void loop() {
           Serial.println(numValue.c_str());
           newValue = newValue + numValue + "#";  //All strings
           break;
-        case 'x':
-            //Code du readAsci
-          break;  
         case 'z':
           //pServer->disconnectClient();//Pas encore fait************
           delay(5000);
@@ -366,9 +405,26 @@ void loop() {
       displayMessage = "Data to BlueTooth";
       // Écrire la valeur pour la charactéristique
       pRemoteCharacteristic->writeValue(newValue.c_str());
+      // Envoyer à nodeered
+      client.publish(nomBLE + String("/commande_cons_to_maison"), newValue.c_str());
       //Heltec.display->drawString(0, 0, newValue.c_str());
       //Heltec.display->display();
     }  // Fin du traitemennt des commandes de la console
+
+    if (noderedReceived) {  //par MQTT
+      noderedReceived = false;
+      newValue = noderedPayload.c_str();
+      Serial.print("Setting characteristic value to ");
+      Serial.println(newValue.c_str());
+      // Set the characteristic's value to be the array of bytes that is actually a string.
+      //pRemoteCharacteristic->writeValue(String(newValue).c_str(), newValue.length());
+      //pRemoteCharacteristic->writeValue(String(newValue), newValue.length());
+
+      pRemoteCharacteristic->writeValue(newValue.c_str());
+      client.publish(nomBLE + String("/commande_NR_to_maison"), newValue.c_str());
+      //Heltec.display->drawString(0, 0, newValue.c_str());
+      //Heltec.display->display();
+    }
 
   } else {
     connected = false;

@@ -66,7 +66,7 @@ void loop() {
     Serial1.print(humid);
     Serial1.print('\n');
     Serial1.flush();  //Juste pour être certain d'avoir enoyé tous les charactères dans la deuxième méthode1,1#
-    
+    Serial2.print('x'+ (String)temperature + ',' + (String)humid + '\n'); //on peut concaténer des strings
   }
   if(millis() % 1000 == 0){
     float temp = sht31.getTemperature();
@@ -76,7 +76,7 @@ void loop() {
     Serial.println(temp);
     Serial.print("Hum: ");
     Serial.println(hum);
-
+   
       
     if (temp >= tempMinimumPourLaFan && !fanPartie) {
       Serial.println("Fan partie");
